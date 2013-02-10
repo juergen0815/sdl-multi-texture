@@ -144,15 +144,13 @@ void App::InitScene( int width, int height )
 
     // some custom event handler
     m_EventHandlerList.push_back( boost::bind( &OnHandleEvent, _1, flag ) );
-
 }
 
 void App::Init(int argc, char* argv[])
 {
-    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0)
-    {
-        THROW( "Failed to initialize SDL video system! SDL Error: %s\n", SDL_GetError());
-    }
+    int err = SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK);
+    ASSERT( err != -1, "Failed to initialize SDL video system! SDL Error: %s\n", SDL_GetError());
+
     atexit(SDL_Quit);
 
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
@@ -161,26 +159,22 @@ void App::Init(int argc, char* argv[])
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
     int stencilSize(8);
-    if (SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, stencilSize) == -1)
-    {
-        THROW("Error setting stencil size to %d! SDL Error:  %s\n", stencilSize, SDL_GetError());
-    }
+    err = SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, stencilSize);
+    ASSERT( err != -1, "Error setting stencil size to %d! SDL Error:  %s\n", stencilSize, SDL_GetError());
     // enable multi sampling
-    if (SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1) == -1)
-    {
-        THROW("Error enabling multi sampling! SDL Error: %s\n", SDL_GetError());
-    }
-    int numSampleBuffers(8); // test what's the max AA. test 8xMSAA
-    if (SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, numSampleBuffers) == -1)
-    {
-        THROW("Error setting number (%d) of AA buffer! SDL Error: %s\n", numSampleBuffers, SDL_GetError());
-    }
+    err = SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    ASSERT( err != -1, "Error enabling multi sampling! SDL Error: %s\n", SDL_GetError());
+
+    int numSampleBuffers(2); // test what's the max AA. test 8xMSAA
+    err = SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, numSampleBuffers);
+    ASSERT( err != -1, "Error setting number (%d) of AA buffer! SDL Error: %s\n", numSampleBuffers, SDL_GetError());
+
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
     int vsync = 1;  // 0 = novsync
     SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, vsync);
 
-    SDL_WM_SetCaption("SDLFW", NULL);
+    SDL_WM_SetCaption("SDL Multi Texture", NULL);
     SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
 
     //  SDL_WM_SetIcon( pei::SDL::SurfaceRef( pei::LogoBrush ), NULL );
@@ -205,10 +199,7 @@ int App::Run()
     int width(960);
     int height(540);
     SDL_Surface *screen = SDL_SetVideoMode(width, height, 32, SDL_OPENGL|SDL_RESIZABLE);
-    if (screen == NULL)
-    {
-        THROW("Unable to set %dx%d video! SDL Error: %s\n", width, height, SDL_GetError());
-    }
+    ASSERT( screen, "Unable to set %dx%d video! SDL Error: %s\n", width, height, SDL_GetError());
 
     InitScene(width, height);
 

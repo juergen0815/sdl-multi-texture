@@ -202,6 +202,7 @@ void Flag::DoRender() throw(std::exception)
     float *vertices = (float*)&m_VertexBuffer[0];
     glVertexPointer(4, GL_FLOAT, m_Stride*sizeof(Vector), vertices);
 #endif
+    // Base texture. No special treatment. Just draw it
     if ( m_Textures[BASE_TEXTURE] ) {
         glClientActiveTexture(GL_TEXTURE0);
         float *texCoords = (float*)&m_VertexBuffer[1];
@@ -211,6 +212,7 @@ void Flag::DoRender() throw(std::exception)
         glActiveTexture(GL_TEXTURE0);
         m_Textures[BASE_TEXTURE]->Enable();
     }
+    // Lightmap. Simple RGB blend it into previous texture
     if ( m_Textures[LIGHT_MAP] ) {
         glClientActiveTexture(GL_TEXTURE1);
         float *texCoords = (float*)&m_VertexBuffer[1];
