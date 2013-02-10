@@ -657,16 +657,6 @@ bool DdsBrush::Load( const char* filename ) throw(std::exception)
             {
                 m_FormatString = "DDS Uncompressed";
 
-                Format fmt = { MaskToColorShift( hdr.m_PixelFormat.m_RMask ),
-                               MaskToColorShift( hdr.m_PixelFormat.m_GMask ),
-                               MaskToColorShift( hdr.m_PixelFormat.m_BMask ),
-                               MaskToColorShift( hdr.m_PixelFormat.m_AMask ),
-
-                               hdr.m_PixelFormat.m_RMask ,
-                               hdr.m_PixelFormat.m_GMask ,
-                               hdr.m_PixelFormat.m_BMask ,
-                               hdr.m_PixelFormat.m_AMask };
-
                 // not sure why there would be a DDSD_PITCH without DDSD_LINEARSIZE - change later.
                 if ( hdr.m_Flags & DDSD_LINEARSIZE )
                 {
@@ -682,6 +672,16 @@ bool DdsBrush::Load( const char* filename ) throw(std::exception)
                 else if ( hdr.m_Flags & DDSD_PITCH )
                 {
                     ASSERT( hdr.m_Flags & DDSD_PITCH, "Per line decoder not implemented!");
+#if 0
+                    Format fmt = { MaskToColorShift( hdr.m_PixelFormat.m_RMask ),
+                                   MaskToColorShift( hdr.m_PixelFormat.m_GMask ),
+                                   MaskToColorShift( hdr.m_PixelFormat.m_BMask ),
+                                   MaskToColorShift( hdr.m_PixelFormat.m_AMask ),
+
+                                   hdr.m_PixelFormat.m_RMask ,
+                                   hdr.m_PixelFormat.m_GMask ,
+                                   hdr.m_PixelFormat.m_BMask ,
+                                   hdr.m_PixelFormat.m_AMask };
 //                    m_Width  = width;
 //                    m_Height = (hdr.m_Flags & DDSD_LINEARSIZE) ? height : 1;
 //                    m_BytesPerPixel = bpp;
@@ -701,6 +701,7 @@ bool DdsBrush::Load( const char* filename ) throw(std::exception)
 //                    {
 //                        blitter.Blit( ddsLineBuffer, m_Surface, 0, y++, width, 1 );
 //                    }
+#endif
                     result = false;
                 }
             }

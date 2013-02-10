@@ -31,18 +31,19 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     : m_VboID(-1)
     , m_Assets( assets )
     , m_MemoryPool( EntityPool::CreatePool<Vector>( 0 ), PoolDeleter() )
-    , m_Stride(2)// store two vectors per vertex
+    , m_Stride(2)                       // store two vectors per vertex incl. texture coords
     , m_VertexBuffer( m_MemoryPool )    // use the same memory pool for vertex and texture coords
     , m_TimeEllapsed(0)
     , m_Speed(1.0)
 {
-    // we might just want to create this in DoInitialize - and throw away the data we don't need locally
+    int lastColumn(columns-1);
+    int lastRow(rows-1);
 
     // allocate memory buffers for vertex and texture coord
     m_VertexBuffer.resize( columns*rows*m_Stride );
 
     // generate index array; we got rows * columns * 2 tris
-    m_IndexArray.resize( (rows-1) * (columns-1) * 3 * 2 ); // 3 vertices per tri, 2 tri per quad = 6 entries per iteration
+    m_IndexArray.resize( lastColumn * lastRow * 3 * 2 ); // 3 vertices per tri, 2 tri per quad = 6 entries per iteration
 
     int looper(0);
     // width x height is always a quad, not a rect
@@ -61,6 +62,8 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     {
         for ( float x = 0; x < columns; ++x )
         {
+            // pack both, vertex and texture into one array
+
             Vector& vertex = *vit; ++vit;
             vertex[ Vector::X ] = x * xstep - width_2; // -4.4 ... +4.4
             vertex[ Vector::Y ] = y * ystep - height_2; // -4.4 ... +4.4
@@ -69,10 +72,10 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
 
             // calc texture positions
             Vector& texCoord = *vit; ++vit;
-            texCoord[ Vector::U ] = x/(columns-1);
-            texCoord[ Vector::V ] = y/(rows-1);
+            texCoord[ Vector::U ] = x/lastColumn;
+            texCoord[ Vector::V ] = y/lastRow;
 
-            // this needs work: we use a row * col vertex and texture array
+            // we use a row * col vertex and texture array
             // to extract triangles, the index array needs to be calculated appropriately
             //        0  1  2...n
             //        +--+--+...
@@ -83,8 +86,8 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
 
             // e.g. t[0] = { 0,1,1'} { 1',0',1 } ...
 
-            // skip last column/row - already indexed
-            if ( x < (columns-1) && y < (rows-1) ) {
+            // skip last column/row - already indexed - we calculate triangles in advance
+            if ( x < lastColumn && y < lastRow ) {
                 // vertices don't need to be set just yet. We just index them here
 
                 // top tri
@@ -126,8 +129,6 @@ Flag::~Flag()
 
 bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
 {
-    bool r(false);
-
     bool hasMultiTexture  = glewGetExtension("GL_ARB_multitexture");
     ASSERT( hasMultiTexture, "No multitexture support!" );
     int numTextureUnits;
@@ -142,6 +143,7 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
     }
     GetRenderState()->ClearFlag( BLEND_COLOR_F );
 
+    // I'll keep this for later if we will add some shader code to do vertex manipulation and blending
     bool hasVBO  = glewGetExtension("GL_ARB_vertex_buffer_object");
     ASSERT( hasVBO, "VBOs not supported!" );
     if ( hasVBO ) {
@@ -156,14 +158,11 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
         glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(int)*m_IndexArray.size(), &m_IndexArray[0] );
         offset += sizeof(int)*m_IndexArray.size();
     }
-    r = true;
-
-    return r;
+    return true;
 }
 
 void Flag::DoRender() throw(std::exception)
 {
-
     int vertexArrayEnabled;
     glGetIntegerv( GL_VERTEX_ARRAY, &vertexArrayEnabled );
     if (!vertexArrayEnabled) {
@@ -214,6 +213,7 @@ void Flag::DoRender() throw(std::exception)
     }
     // Lightmap. Simple RGB blend it into previous texture
     if ( m_Textures[LIGHT_MAP] ) {
+        // same vertex pointers
         glClientActiveTexture(GL_TEXTURE1);
         float *texCoords = (float*)&m_VertexBuffer[1];
         // only use u/v coords, skip t/s - stride is from n[0] + offset = n[1]
