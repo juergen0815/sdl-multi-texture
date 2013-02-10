@@ -5,186 +5,305 @@
  *      Author: Jurgen
  */
 
-#if 0
-#include "config.h"
-#include "wave_mesh.h"
 
-#include <render/tex_surface.h>
+#include "flag.h"
+#include "cube.h"
+#include "brush.h"
+#include <bmp_loader.h>
 
-namespace wave {
+#include <cmath>
 
-	static GLfloat points[45][45][3];    // the array for the points on the grid of our "wave"
+#include <boost/filesystem.hpp>
 
-	class VertexTarget : public pei::render::VertexArrayRenderTarget
-	{
-	public:
-		void AllocateVertexBuffer( unsigned int num )
-		{
-			m_Vertices.resize( num );
-		}
-		GLfloat* GetVertexBuffer() { return &m_Vertices.at(0); }
+const int columns = 120;
+const int rows    = 120;
 
-		GLfloat* GetTexCoordBuffer() { return &m_TextureCoords.at(0); }
-	};
+struct PoolDeleter
+{
+    void operator()(void const *p) const
+    {
+        // called when shared_ptr goes out of scope - that is last container releases link to pool
+        EntityPool::DestroyPool( (MemoryPool*)p );
+    }
+};
 
-	WaveMesh::WaveMesh()
-		: amp(4)
-		, xrot(0)
-    	, yrot()
-    	, zrot()
-		, m_TimeEllapsed(0)
-		, m_Speed(0.75)
-	{
-		VertexTarget *rt = new VertexTarget;
-		SetRenderTarget( pei::RenderTargetInterfacePtr(rt) );
-	    float float_x, float_y; // loop counters.
+Flag::Flag( const std::vector< BrushPtr >& assets )
+    : m_VboID(-1)
+    , m_Assets( assets )
+    , m_MemoryPool( EntityPool::CreatePool<Vector>( 0 ), PoolDeleter() )
+    , m_Stride(2)// store two vectors per vertex
+    , m_VertexBuffer( m_MemoryPool )    // use the same memory pool for vertex and texture coords
+    , m_TimeEllapsed(0)
+    , m_Speed(1.0)
+{
+    // we might just want to create this in DoInitialize - and throw away the data we don't need locally
 
-	    for(float_x = 0.0f; float_x < 9.0f; float_x +=  0.2f )	{
-			for(float_y = 0.0f; float_y < 9.0f; float_y += 0.2f)		{
-				points[ (int) (float_x*5) ][ (int) (float_y*5) ][0] = float_x - 4.4f;
-				points[ (int) (float_x*5) ][ (int) (float_y*5) ][1] = float_y - 4.4f;
-				points[ (int) (float_x*5) ][ (int) (float_y*5) ][2] = (float) (sin( ( (float_x*5*8)/360 ) * 3.14159 * amp ));
-			}
-	    }
+    // allocate memory buffers for vertex and texture coord
+    m_VertexBuffer.resize( columns*rows*m_Stride );
 
-		// indices and texCoords remain static, only vertices will be updated
-	    std::vector<unsigned int> indexArray;
-	    int indexOffset(0);
-	    int x, y;
-		unsigned int numVertices(0);
-	    float float_xb, float_yb;
-	    for (x=0; x<44; x++) {
-			for (y=0; y<44; y++) {
-				float_x  = (float) (x)/44;
-				float_y  = (float) (y)/44;
-				float_xb = (float) (x+1)/44;
-				float_yb = (float) (y+1)/44;
+    // generate index array; we got rows * columns * 2 tris
+    m_IndexArray.resize( (rows-1) * (columns-1) * 3 * 2 ); // 3 vertices per tri, 2 tri per quad = 6 entries per iteration
 
-				texCoords.push_back(float_x );  texCoords.push_back( float_y);
-				texCoords.push_back(float_x );  texCoords.push_back( float_yb);
-				texCoords.push_back(float_xb ); texCoords.push_back( float_yb);
-				texCoords.push_back(float_xb ); texCoords.push_back( float_y);
+    int looper(0);
+    // width x height is always a quad, not a rect
+    const float width_2  = 5.0f; // 4.4f - for columns = 45
+    const float height_2 = 5.0f;
 
-				// must restart poly for proper texture mapping...optimize this
-				indexArray.push_back(0+numVertices);
-				indexArray.push_back(1+numVertices);
-				indexArray.push_back(3+numVertices);
-				indexArray.push_back(3+numVertices);
-				indexArray.push_back(1+numVertices);
-				indexArray.push_back(2+numVertices);
-				// use TRIANGLES, cannot use TRI_STRIPS - triangle getting merged into 1 draw call, strips don't
-				rt->AddPolygon( GL_TRIANGLES, 6, indexOffset );
-				indexOffset += 6;
-				numVertices += 4;
-			}
-	    }
-		rt->SetTexCoords(texCoords.size(), &texCoords.at(0) );
-		rt->SetIndices( indexArray.size(), &indexArray.at(0));
-		rt->AllocateVertexBuffer( numVertices*3 );
-		SetColor( pei::Color( 1.0,1.0,1.0 ));
-		RequestStateChanged( true );
-	}
+    // generate vertex array
+    const float xstep = (2*width_2)/columns; // mesh sub divider - 0.2f
+    const float ystep = (2*height_2)/rows; // mesh sub divider - 0.2f
+    const float amp  = 0.85f; // "height" of wave
+    const float numWaves = 16.0f; // num of sin loops (or waves)
+    auto vit = m_VertexBuffer.begin();
 
-	WaveMesh::~WaveMesh()
-	{
-	}
+    // I think we need an additional row/column to finish this mesh ??
+    for ( float y = 0; y < rows; ++y )
+    {
+        for ( float x = 0; x < columns; ++x )
+        {
+            Vector& vertex = *vit; ++vit;
+            vertex[ Vector::X ] = x * xstep - width_2; // -4.4 ... +4.4
+            vertex[ Vector::Y ] = y * ystep - height_2; // -4.4 ... +4.4
+            // maybe I should shift this for each row, huh, norm x to "length" of column (0.0 - 1.0)
+            vertex[ Vector::Z ] = std::sin( (x/columns) * numWaves ) * amp; // make z a big "wavy"
 
-	pei::SurfacePtr WaveMesh::SetSurface(pei::SurfacePtr s, int n)
-	{
-		pei::Drawable::SetSurface( s, n );
-#if 0
-		// read back texture
-		pei::Texture2DSurfacePtr tex = boost::dynamic_pointer_cast< pei::Texture2DSurface >( GetSurface(0) );
-		if ( tex ) {
-			// We must re calc texture coords for each "frame" we attach to the cube - for non pow2 surfaces!
-//			int numCoords = texCoords.size();
-			VertexTarget *rt = (VertexTarget*)(GetRenderTarget().get());
-			GLfloat *texCoords = rt->GetTexCoordBuffer();
-			const pei::TexSurface::TexCoords &triCoords = tex->GetCoords();
+            // calc texture positions
+            Vector& texCoord = *vit; ++vit;
+            texCoord[ Vector::U ] = x/(columns-1);
+            texCoord[ Vector::V ] = y/(rows-1);
 
-			int n(0);
-			float x,y;
-		    float tx0, tx1, ty0, ty1;
-		    float dx = (triCoords.MaxX-triCoords.MinX)/44;
-		    float dy = (triCoords.MaxY-triCoords.MinY)/44;
+            // this needs work: we use a row * col vertex and texture array
+            // to extract triangles, the index array needs to be calculated appropriately
+            //        0  1  2...n
+            //        +--+--+...
+            //        |\ |\ |
+            //        | \| \|
+            //        +--+--+
+            // n*y +  0' 1' 2'...(n+1)*y
 
-		    for (x = triCoords.MinX; x < triCoords.MaxX; x += dx ) {
-				for (y = triCoords.MinY; y < triCoords.MaxY; y += dy) {
-					tx0 = x;
-					ty0 = y;
-					tx1 = x + dx;
-					ty1 = y + dy;
+            // e.g. t[0] = { 0,1,1'} { 1',0',1 } ...
 
-					texCoords[ n++ ] = tx0; texCoords[ n++ ] = ty0;
-					texCoords[ n++ ] = tx0; texCoords[ n++ ] = ty1;
-					texCoords[ n++ ] = tx1; texCoords[ n++ ] = ty1;
-					texCoords[ n++ ] = tx1; texCoords[ n++ ] = ty0;
-				}
-		    }
-		}
-#endif
-		return s;
-	}
+            // skip last column/row - already indexed
+            if ( x < (columns-1) && y < (rows-1) ) {
+                // vertices don't need to be set just yet. We just index them here
 
-	void WaveMesh::OnUpdateAnimation( const pei::RenderProfilePtr& profile, double time )
-	{
-		m_TimeEllapsed += time;
-	    if ( m_TimeEllapsed*m_Speed > 16.67 ) {
-	    	m_TimeEllapsed = 0;
-			int x, y;
-			for (y = 0; y <45; y++) {
-				points[44][y][2] = points[0][y][2];
-			}
+                // top tri
+                int
+                idx = int(x + 0 + columns*y);     m_IndexArray[ looper++ ] = idx;  // 0x0
+                idx = int(x + 1 + columns*y);     m_IndexArray[ looper++ ] = idx;  // 1x0
+                idx = int(x + 0 + columns*(y+1)); m_IndexArray[ looper++ ] = idx;  // 1x1 - bottom row
 
-			for( x = 0; x < 44; x++ ) {
-				for( y = 0; y < 45; y++) {
-					points[x][y][2] = points[x+1][y][2];
-				}
-			}
-			// no point in updating if vertices don't change
-			RequestStateChanged( true );
+                // bottom tri
+                idx = int(x + 1 + columns*y);     m_IndexArray[ looper++ ] = idx; // 0x0
+                idx = int(x + 0 + columns*(y+1)); m_IndexArray[ looper++ ] = idx; // 1x1 - bottom row
+                idx = int(x + 1 + columns*(y+1)); m_IndexArray[ looper++ ] = idx; // 0x1 - bottom row
+                idx = 0;
+            }
+        }
+    }
 
-//		    xrot +=0.3f;
-//		    yrot +=0.2f;
-//		    zrot +=0.4f;
-		    SetRotation( GetXRotation(), GetYRotation() + 0.2f , GetZRotation() );
-	    }
-	}
+    int pitch  = columns*m_Stride; // pair of Vertex + TexCoord
+    int x = columns/2*m_Stride;
+    int y = rows/2;
+    auto mid = m_VertexBuffer[ x + y * pitch ]; // stride = sizeof(Vector) - we have a pair here, Vertex+Tex
 
-	void WaveMesh::OnUpdateState( const pei::RenderProfilePtr& profile )
-	{
-		if ( MustRefreshState( ) )
-		{
-			VertexTarget *rt = (VertexTarget*)(GetRenderTarget().get());
-			GLfloat *vertexArray = rt->GetVertexBuffer();
-			int x, y;
-			int idx(0);
-			for (x=0; x<44; x++) {
-				for (y=0; y<44; y++) {
-					vertexArray[idx++] = ( points[x][y][0] );
-					vertexArray[idx++] = ( points[x][y][1] );
-					vertexArray[idx++] = ( points[x][y][2] );
+    std::vector< BrushPtr > brushes;
+    try {
+        // base texture
+        BmpBrush* base( new BmpBrush );
+        ASSERT( base->Load( "data/Wood.bmp"), "Error loading wood texture" );
+        brushes.push_back( BrushPtr(base) );
+    } catch ( boost::filesystem::filesystem_error &ex ) {
+        throw;
+    } catch ( std::ios_base::failure& ex ) {
+        THROW( "Error loading texture.\n%s", ex.what() );
+    } catch ( std::exception &ex ) {
+        throw;
+    } catch ( ... ) {
+        throw;
+    }
 
-					vertexArray[idx++] = ( points[x][y+1][0] );
-					vertexArray[idx++] = ( points[x][y+1][1] );
-					vertexArray[idx++] = ( points[x][y+1][2] );
-
-					vertexArray[idx++] = ( points[x+1][y+1][0] );
-					vertexArray[idx++] = ( points[x+1][y+1][1] );
-					vertexArray[idx++] = ( points[x+1][y+1][2] );
-
-					vertexArray[idx++] = ( points[x+1][y][0] );
-					vertexArray[idx++] = ( points[x+1][y][1] );
-					vertexArray[idx++] = ( points[x+1][y][2] );
-				}
-			}
-		}
-	}
-
-	void WaveMesh::OnDraw( const pei::RenderProfilePtr& profile, const pei::SurfacePtr& buffer, const pei::RenderParam& param  )
-	{
-		pei::Drawable::OnDraw( profile, buffer, param );
-	}
-
+    m_Child = EntityPtr( new Cube( brushes ) );
+    m_Child->GetRenderState()->Translate( mid, Vector(1.0f, 1.0f, 1.0f) );
+    // this entity renders
+    AddEntity( m_Child, 0 );
 }
+
+Flag::~Flag()
+{
+    // shouldn't be done in d'tor...might be weakly linked to e.g. event handler...but vbo must be released from render thread
+    if ( m_VboID > 0 ) {
+        glDeleteBuffers(1, &m_VboID);
+    }
+}
+
+bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
+{
+    bool r(false);
+
+    if ( m_Assets.size() ) {
+        for (auto& asset : m_Assets ) {
+            m_Texture = TexturePtr( new Texture );
+            m_Texture->Load( *asset.get() );
+            break; // no multi texture at this time
+        }
+        GetRenderState()->ClearFlag( BLEND_COLOR_F );
+    }
+
+    bool hasVBO  = glewGetExtension("GL_ARB_vertex_buffer_object");
+    ASSERT( hasVBO, "VBOs not supported!" );
+    if ( hasVBO ) {
+        glGenBuffers(1, &m_VboID);
+        glBindBuffer(GL_ARRAY_BUFFER, m_VboID);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Vector)*m_VertexBuffer.size(), 0, GL_STATIC_DRAW_ARB);
+        std::size_t offset(0);
+        // copy vertices starting from 0 offest - holds both, vertex and texture array
+        float *vertices = (float*)&m_VertexBuffer[0];
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(Vector)*m_VertexBuffer.size(), vertices);
+        offset += sizeof(Vector)*m_VertexBuffer.size();
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(int)*m_IndexArray.size(), &m_IndexArray[0] );
+        offset += sizeof(int)*m_IndexArray.size();
+#if 0
+        offset += sizeof(vertices);
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(normals), normals);                // copy normals after vertices
+        offset += sizeof(normals);
+        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(colors), colors);  // copy colors after normals
 #endif
+//        if ( m_Texture ) {
+//            float *texCoords = (float*)&m_VertexBuffer[0];
+//            glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(Vector)*m_TexCoordBuffer.size(), texCoords);  // copy colors after normals
+//        }
+    }
+    r = true;
+
+    return r;
+}
+
+void Flag::DoRender() throw(std::exception)
+{
+#if _HAS_NORMALS_
+    // enable vertex arrays
+    int normalArrayEnabled;
+    glGetIntegerv( GL_NORMAL_ARRAY, &normalArrayEnabled );
+    if ( !normalArrayEnabled )  {
+        glEnableClientState(GL_NORMAL_ARRAY);
+    }
+#endif
+#if _HAS_COLOR_ARRAY_
+    int colorArrayEnabled;
+    glGetIntegerv( GL_COLOR_ARRAY, &colorArrayEnabled );
+    if ( !colorArrayEnabled && (GetRenderState()->GetFlags() & BLEND_COLOR_F) ) {
+        glEnableClientState(GL_COLOR_ARRAY);
+    }
+#endif
+
+    int vertexArrayEnabled;
+    glGetIntegerv( GL_VERTEX_ARRAY, &vertexArrayEnabled );
+    if (!vertexArrayEnabled) {
+        glEnableClientState(GL_VERTEX_ARRAY);
+    }
+    int m_TexCoordArrayEnabled;
+    glGetIntegerv( GL_TEXTURE_COORD_ARRAY, &m_TexCoordArrayEnabled );
+    if ( m_Texture && !m_TexCoordArrayEnabled ) {
+        if (!m_TexCoordArrayEnabled) {
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        }
+    }
+
+    int blend_enabled;
+    glGetIntegerv(GL_BLEND, &blend_enabled);
+
+#ifdef _USE_VBO_
+    glBindBuffer(GL_ARRAY_BUFFER, m_VboID);
+    // before draw, specify vertex and index arrays with their offsets
+    std::size_t offset(0);
+    glVertexPointer(3, GL_FLOAT, m_Stride*sizeof(Vector), (void*)offset); offset += sizeof(vertices);
+//    glNormalPointer(   GL_FLOAT, 0, (void*)offset); offset += sizeof(normals);
+//    glColorPointer (4, GL_FLOAT, 0, (void*)offset);
+    if ( m_Texture) {
+        m_Texture->Enable();
+        offset += sizeof(Vector);
+        glTexCoordPointer(2, GL_FLOAT, m_Stride*sizeof(Vector), (void*)offset );
+        if (blend_enabled) {
+            glDisable( GL_BLEND );
+        }
+    }
+    // use draw indices
+    int *indices = &m_IndexArray[0];
+    glDrawElements( GL_TRIANGLES, m_IndexArray.size(), GL_UNSIGNED_INT, indices );
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+#else
+    // before draw, specify vertex arrays
+    float *vertices = (float*)&m_VertexBuffer[0];
+    glVertexPointer(4, GL_FLOAT, m_Stride*sizeof(Vector), vertices);
+#if _HAS_NORMALS_
+    glNormalPointer(  GL_FLOAT, 0, normals);
+#endif
+#if _HAS_COLOR_ARRAY_
+    glColorPointer(4, GL_FLOAT, 0, colors);
+#else
+//    glColor4f( 0.0f, 0.4f, 1.0f, 0.8f );
+#endif
+    if ( m_Texture) {
+        m_Texture->Enable();
+        float *texCoords = (float*)&m_VertexBuffer[1];
+        // only use u/v coords, skip t/s - stride is from n[0] + offset = n[1]
+        glTexCoordPointer( 2, GL_FLOAT, m_Stride*sizeof(Vector), texCoords );
+    }
+
+    int *indices = &m_IndexArray[0];
+    glDrawElements( GL_TRIANGLES, m_IndexArray.size(), GL_UNSIGNED_INT, indices );
+
+#endif
+    if (!vertexArrayEnabled)  {
+        glDisableClientState(GL_VERTEX_ARRAY);  // disable vertex arrays
+    }
+    if ( m_Texture ) {
+        m_Texture->Disable();
+        if (!m_TexCoordArrayEnabled) {
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        }
+        if (blend_enabled) {
+            glEnable( GL_BLEND );
+        }
+    }
+#if _HAS_NORMALS_
+    if (!colorArrayEnabled)   {
+        glDisableClientState(GL_COLOR_ARRAY);
+    }
+#endif
+#if _HAS_COLOR_ARRAY_
+    if (!normalArrayEnabled) {
+        glDisableClientState(GL_NORMAL_ARRAY);
+    }
+#endif
+}
+
+void Flag::DoUpdate( float ticks ) throw(std::exception)
+{
+    m_TimeEllapsed += ticks;
+    if ( m_TimeEllapsed*m_Speed > 16.67 )
+    {
+        m_TimeEllapsed = 0;
+        // size must be > 2
+        auto first = m_VertexBuffer[0]; // backup first vertex
+        for ( auto vit = m_VertexBuffer.begin(); vit != m_VertexBuffer.end();  ) {
+            auto& vertex = *vit; vit += m_Stride;
+            vertex[ Vector::Z ] = (*vit)[ Vector::Z ];
+        }
+        auto& last = m_VertexBuffer[ columns*rows*m_Stride-m_Stride];
+        last[ Vector::Z ] = first[ Vector::Z ];
+
+        // This is one example why we are using a custom Vector array instead of simple floats.
+        // A vector is a Vertex with a size of float[4] and can overlay a simple vertex array
+        // But we have all luxury a vector has, e.g. normalizing, dot and cross product, etc.
+
+        // use mid point of mesh
+        int pitch  = columns*m_Stride; // pair of Vertex + TexCoord
+        int x = columns/2*m_Stride;
+        int y = rows/2;
+        auto mid = m_VertexBuffer[ x + y * pitch ]; // stride = 2*Vector - we have a pair here, Vertex+Tex
+        // let it "swim"
+        m_Child ->GetRenderState()->GetMatrix().LoadIdentity().Translate( mid );
+    }
+}

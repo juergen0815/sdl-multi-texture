@@ -7,6 +7,8 @@
 
 #include "vector.h"
 
+#include <GL/glew.h>
+
 const float MAX_EMBOSS = 0.01f;
 
 // sample code from NeHe
@@ -50,7 +52,7 @@ Vector SetUpBumps( const Vector& surfaceNormal, const Vector& vertex, const Vect
 // Texture setup for one face
 
 //TODO: Don't use quads
-float data[]= {
+GLfloat data[]= {
     // FRONT FACE
     0.0f, 0.0f,     -1.0f, -1.0f, +1.0f, // texCoord - vertex
     1.0f, 0.0f,     +1.0f, -1.0f, +1.0f, // texCoord - vertex

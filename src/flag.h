@@ -6,40 +6,62 @@
  */
 
 #ifndef MESH_H
-#define MESH_H
+#define FLAG_H
 
-#if 0
-#include <render/drawable.h>
+
+#include "err.h"
+#include "entity.h"
+#include "brush.h"
+#include "texture.h"
+#include "entitypool.h"
+#include "allocator.h"
 
 #include <vector>
 
-namespace wave
+class Flag : public Entity
 {
-	class WaveMesh : public pei::Drawable
-	{
-	    std::vector<GLfloat> texCoords;
-	    double 	 amp;
-	    float 	 xrot, yrot, zrot;
-	    double 	 m_TimeEllapsed;
-	    double	 m_Speed;
-	public:
-		WaveMesh();
+public:
+    enum {
+        BLEND_COLOR_F = 1<<RenderState::USER_B
+    };
+    enum {
+        TEXTURE,
+        NORMAL,
+        SPECULAR
+    };
 
-		virtual ~WaveMesh();
+private:
+    GLuint      m_VboID;
 
-		virtual pei::SurfacePtr SetSurface( pei::SurfacePtr s, int n = 0 );
+    std::vector< BrushPtr > m_Assets;    // all mmaped data. Don't worry about pixel storage memory here!
+    TexturePtr  m_Texture;
+    TexturePtr  m_NormalMap;
+    TexturePtr  m_SpecularNap;
 
-	protected:
-		virtual void OnUpdateAnimation( const pei::RenderProfilePtr& profile, double time );
+    typedef std::vector<Vector, Allocator<Vector>> VertexVector;
 
-        virtual void OnUpdateState( const pei::RenderProfilePtr& profile );
+    boost::shared_ptr<MemoryPool> m_MemoryPool;
 
-		virtual void OnDraw( const pei::RenderProfilePtr& profile, const pei::SurfacePtr& buffer, const pei::RenderParam& param  );
-	};
+    int          m_Stride;
+    VertexVector m_VertexBuffer;      // linear buffer - custom allocator - all GPU data are stored here
+    std::vector<int>  m_IndexArray;   // standard array to map vertices to tris
 
-}
+    float       m_TimeEllapsed;
+    float       m_Speed;
 
-#endif
+    EntityPtr   m_Child;              // link this just for the
+public:
+    Flag( const std::vector< BrushPtr >& assets );
+
+    virtual ~Flag();
+
+protected:
+    virtual bool DoInitialize( Renderer* renderer ) throw(std::exception);
+
+    virtual void DoRender() throw(std::exception);
+
+    virtual void DoUpdate( float ticks ) throw(std::exception);
+
+};
 
 #endif /* MESH_H */
-

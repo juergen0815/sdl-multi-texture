@@ -29,7 +29,7 @@ bool Entity::CompareEntityPriorities( const EntityPtr& a, const EntityPtr& b ) {
 
 RenderState* Entity::GetRenderState()
 {
-    // TODO: This must be pointer. Can be subclassed!
+    // TODO: This must be pointer eventually. Can be subclassed!
     return &m_RenderState;
 }
 

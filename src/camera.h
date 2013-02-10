@@ -37,7 +37,7 @@ private:
 
     virtual void DoUpdate( float ticks ) throw( std::exception );
 
-    virtual void DoRender( ) throw( std::exception ) {};
+    virtual void DoRender( )  throw( std::exception ) {};
 
     float GetJoystickAxisValue( int index );
 };

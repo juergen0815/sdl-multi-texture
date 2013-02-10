@@ -22,6 +22,10 @@ public:
     enum Color {
         R, G, B, A
     };
+    // re-use vector as pure storage for s,t coords - will not work with cross/dot product!
+    enum TexCoord {
+        U, V, S, T
+    };
 private:
     // this will hardly pad, but we must ensure we can tightly pack a float[4] into a linear array!
 #pragma pack( push, 1 )

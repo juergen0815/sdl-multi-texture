@@ -37,13 +37,36 @@ public:
 
     void Free( void* p, std::size_t num );
 
+    MemoryPool( std::size_t size );
+
     MemoryPool( std::size_t num, std::size_t size );
 
     MemoryPool( const MemoryPool& other );
 
     ~MemoryPool();
 
+    void operator=( const MemoryPool& o );
+
 };
+
+MemoryPool::MemoryPool( std::size_t size )
+    : m_Data(nullptr)
+    , m_NumBlocks(0)
+    , m_BlockSize(size)
+    , m_BlocksAvailable(0)
+    , m_FirstFree(nullptr)
+    , m_HeaderSize(0)
+    , m_Begin(nullptr)
+    , m_End(nullptr)
+    , m_NextPool(nullptr)
+{
+    // TODO: This could in fact allocate an empty pool - than it becomes a heap!
+    //       You'd allocate sub pools with different sizes and the root becomes the pool handler
+
+    // So, in that case,
+    // 1) just create an empty pool: pool = new EntityPool< MyClass >::CreatePool(0);
+    // 2) call Allocate( num_of_entries ) for each pool: EntityPool::Allocate( pool, MY_POOL_SIZE );
+}
 
 MemoryPool::MemoryPool( std::size_t num, std::size_t size )
     : m_Data( nullptr )
@@ -53,10 +76,13 @@ MemoryPool::MemoryPool( std::size_t num, std::size_t size )
     , m_NextPool(nullptr)
 {
     m_HeaderSize = sizeof( Block ) * num;
-    // Allocate memory for num amount of blocks
-    m_Data = static_cast<Block*>(std::malloc( m_HeaderSize + num * size ));
-    // clear the header (only)
-    std::memset( m_Data, 0x00, m_HeaderSize );
+    if ( num > 0 )
+    {
+        // Allocate memory for num amount of blocks
+        m_Data = static_cast<Block*>(std::malloc( m_HeaderSize + num * size ));
+        // clear the header (only)
+        std::memset( m_Data, 0x00, m_HeaderSize );
+    }
     m_Begin = ((char*)m_Data) + m_HeaderSize;
     m_FirstFree = m_Begin;
     m_End       = m_Begin + num * size;
@@ -73,7 +99,23 @@ MemoryPool::MemoryPool( const MemoryPool& o )
     , m_NextPool(o.m_NextPool)
 {
     if ( m_Data ) {
-        delete m_Data;
+        std::free( m_Data );
+    }
+    m_Data = o.m_Data;
+}
+
+void MemoryPool::operator=( const MemoryPool& o )
+{
+    m_NumBlocks = o.m_NumBlocks;
+    m_BlockSize = o.m_BlockSize;
+    m_BlocksAvailable = o.m_BlocksAvailable;
+    m_FirstFree = o.m_FirstFree;
+    m_HeaderSize = o.m_HeaderSize;
+    m_Begin = o.m_Begin;
+    m_End = o.m_End;
+    m_NextPool = o.m_NextPool;
+    if ( m_Data ) {
+        std::free( m_Data );
     }
     m_Data = o.m_Data;
 }
@@ -127,10 +169,12 @@ void* MemoryPool::Allocate( std::size_t num ) throw ()
         while ( pool->m_NextPool ) {
             pool = pool->m_NextPool;
         }
-        pool = new MemoryPool( num, m_BlockSize );
-        m_NextPool = pool;
+        MemoryPool* tPool = new MemoryPool( num, m_BlockSize );
+        tPool->m_NextPool = pool->m_NextPool;
+        pool->m_NextPool = tPool;
+        pool = tPool;
     }
-    pool->m_BlocksAvailable = 0;
+    pool->m_BlocksAvailable -= num;
     void *p = static_cast<void*>(pool->m_FirstFree);
     char *addr = pool->m_FirstFree;
     for ( std::size_t i = 0; i < num; ++i, addr += pool->m_BlockSize ) {
@@ -153,9 +197,10 @@ void MemoryPool::Free( void* p )
             // mark block as available
             pool->m_Data[ offset ].m_Data = 0;
             // If pool is empty but we have another one attached, make next current
-            if ( (++pool->m_BlocksAvailable == pool->m_NumBlocks) && pool->m_NextPool ) {
+            if ( ((++pool->m_BlocksAvailable) == pool->m_NumBlocks) && pool->m_NextPool ) {
                 MemoryPool *tPool = pool->m_NextPool;
-                *this = *tPool;
+                *pool = *tPool;
+                // clear these to not delete them
                 tPool->m_NextPool = NULL;
                 tPool->m_Data = NULL;
                 delete tPool;
@@ -176,12 +221,12 @@ void MemoryPool::Free( void* p, std::size_t num )
     MemoryPool *pool = this;
     do {
         // is this address in this pool?
-        if ( p >= pool->m_Begin && p < pool->m_End ) {
-            std::size_t offset = ( static_cast<char*>(p) - pool->m_Begin ) /  m_BlockSize;
+        if ( p >= pool->m_Begin && p < pool->m_End && pool->m_BlockSize > 0 ) {
+            std::size_t offset = ( static_cast<char*>(p) - pool->m_Begin ) /  pool->m_BlockSize;
             // if for some reason someone frees more blocks than size of buffer...
-            if ( (m_NumBlocks - offset) < num ) num = m_NumBlocks - offset;
+            if ( (pool->m_NumBlocks - offset) < num ) num = pool->m_NumBlocks - offset;
             // first in new freed block
-            m_FirstFree = pool->m_Data[ offset ].m_Data;
+            pool->m_FirstFree = pool->m_Data[ offset ].m_Data;
             pool->m_BlocksAvailable += num;
             for ( std::size_t i = 0; i < num; ++i, ++offset ) {
                 // mark block as available
@@ -190,9 +235,10 @@ void MemoryPool::Free( void* p, std::size_t num )
             // If pool is empty but we have another one attached, make next current
             if ( (pool->m_BlocksAvailable == pool->m_NumBlocks) && pool->m_NextPool ) {
                 MemoryPool *tPool = pool->m_NextPool;
-                *this = *tPool;
-                tPool->m_NextPool = NULL;
-                tPool->m_Data = NULL;
+                *pool = *tPool;
+                // clear these to not delete them
+                tPool->m_NextPool = nullptr;
+                tPool->m_Data = nullptr;
                 delete tPool;
             }
             return;
@@ -215,7 +261,7 @@ EntityPool::~EntityPool()
 
 MemoryPool* EntityPool::CreatePool( std::size_t num, std::size_t objSize )
 {
-    MemoryPool* pool = new MemoryPool( num, objSize);
+    MemoryPool* pool = num > 0 ? (new MemoryPool( num, objSize)) : (new MemoryPool( objSize ));
     return pool;
 }
 

@@ -13,6 +13,8 @@ Texture::Texture()
     : m_TextID( -1 )
     , m_Width(0)
     , m_Height(0)
+    , m_TextureFilter(GL_LINEAR)
+    , m_WrapMode(GL_REPEAT)
 {
 }
 
@@ -20,6 +22,37 @@ Texture::~Texture()
 {
     if ( m_TextID > -1 ) {
         glDeleteTextures(1,(GLuint*)&m_TextID);
+    }
+}
+
+void Texture::SetFilter( int filter )
+{
+    try {
+        // need to figure out if this is called from the current context ??? - or disallow calling from main thread???
+        if ( m_TextID > -1 ) {
+            /* Linear Filtering */
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, m_TextureFilter );
+            glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, m_TextureFilter );
+        }
+    }
+    // we need to handle OGL exceptions somehow
+    catch (...)
+    {
+
+    }
+}
+
+void Texture::SetWrapMode( int clampMode )
+{
+    try {
+        // TODO: use flags to set wrap mode
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, m_WrapMode);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, m_WrapMode);
+
+    }
+    catch ( ... )
+    {
+
     }
 }
 
@@ -37,12 +70,12 @@ bool Texture::Allocate( int width, int height, int bpp /*= 4*/ ) throw(std::exce
         glBindTexture( GL_TEXTURE_2D, m_TextID );
 
         /* Linear Filtering */
-        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, m_TextureFilter );
+        glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, m_TextureFilter );
 
         // TODO: use flags to set wrap mode
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, m_WrapMode);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, m_WrapMode);
 
         // TODO: use flags to switch mip maps on/off
         glTexParameterf(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);

@@ -20,6 +20,8 @@ class Texture
 protected:
     int m_TextID;
     int m_Width, m_Height;
+    int m_TextureFilter;
+    int m_WrapMode;
 public:
     Texture();
 
@@ -42,6 +44,10 @@ public:
     void Enable() const;
 
     void Disable() const;
+
+    void SetFilter( int filter );
+
+    void SetWrapMode( int clampMode );
 };
 
 typedef boost::shared_ptr<Texture> TexturePtr;

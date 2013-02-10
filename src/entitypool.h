@@ -88,7 +88,6 @@ void EntityPool::Delete( MemoryPool* pool, T *p, int num ) throw()
         p[i].~T();
         EntityPool::Free( pool, &p[i] );
     }
-//    EntityPool::Free( pool, p, num );
 }
 
 #endif /* ENTITYPOOL_H_ */

@@ -11,6 +11,7 @@
 
 #include "viewport.h"
 #include "camera.h"
+#include "flag.h"
 #include "cube.h"
 
 #include <bmp_loader.h>
@@ -38,9 +39,9 @@ App::~App()
     if ( m_Joystick ) SDL_JoystickClose(m_Joystick);
 }
 
-bool OnHandleCubeKeyEvent( const SDL_Event& event, EntityPtr c1, EntityPtr c2 )
+bool OnHandleEvent( const SDL_Event& event, EntityPtr c1 )
 {
-    ASSERT( c1 && c2, "No entities in event handler!" );
+    ASSERT( c1 , "No entities in event handler!" );
 
     bool processed(false);
     switch (event.type)
@@ -49,30 +50,18 @@ bool OnHandleCubeKeyEvent( const SDL_Event& event, EntityPtr c1, EntityPtr c2 )
         switch (event.key.keysym.sym)
         {
         case SDLK_LEFT:
-            c1->GetRenderState()->Rotate( {0, -10, 0 } );
-            c2->GetRenderState()->Rotate( {0, -10, 0 } );
             processed = true;
             break;
         case SDLK_RIGHT:
-            c1->GetRenderState()->Rotate( {0, 10, 0 } );
-            c2->GetRenderState()->Rotate( {0, 10, 0 } );
             processed = true;
             break;
         case SDLK_UP:
-            c1->GetRenderState()->Rotate( {-10, 0, 0 } );
-            c2->GetRenderState()->Rotate( {-10, 0, 0 } );
             processed = true;
             break;
         case SDLK_DOWN:
-            c1->GetRenderState()->Rotate( {10, 0, 0 } );
-            c2->GetRenderState()->Rotate( {10, 0, 0 } );
             processed = true;
             break;
         case SDLK_HOME:
-            c1->GetRenderState()->GetMatrix().LoadIdentity();
-            c1->GetRenderState()->Translate( Vector(-7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
-            c2->GetRenderState()->GetMatrix().LoadIdentity();
-            c2->GetRenderState()->Translate( Vector(+7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
             processed = true;
             break;
         default:
@@ -82,10 +71,6 @@ bool OnHandleCubeKeyEvent( const SDL_Event& event, EntityPtr c1, EntityPtr c2 )
     case SDL_JOYBUTTONDOWN:
         switch ( event.jbutton.button ) {
         case JOY_BUTTONS::START:
-            c1->GetRenderState()->GetMatrix().LoadIdentity();
-            c1->GetRenderState()->Translate( Vector(-7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
-            c2->GetRenderState()->GetMatrix().LoadIdentity();
-            c2->GetRenderState()->Translate( Vector(+7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
             processed = true;
             break;
         default:
@@ -104,23 +89,15 @@ bool OnHandleCubeKeyEvent( const SDL_Event& event, EntityPtr c1, EntityPtr c2 )
         switch ( event.jhat.value )
         {
         case SDL_HAT_LEFT:
-            c1->GetRenderState()->Rotate( {0, -10, 0 } );
-            c2->GetRenderState()->Rotate( {0, -10, 0 } );
             processed = true;
             break;
         case SDL_HAT_RIGHT:
-            c1->GetRenderState()->Rotate( {0,  10, 0 } );
-            c2->GetRenderState()->Rotate( {0,  10, 0 } );
             processed = true;
             break;
         case SDL_HAT_UP:
-            c1->GetRenderState()->Rotate( {-10, 0, 0 } );
-            c2->GetRenderState()->Rotate( {-10, 0, 0 } );
             processed = true;
             break;
         case SDL_HAT_DOWN:
-            c1->GetRenderState()->Rotate( { 10, 0, 0 } );
-            c2->GetRenderState()->Rotate( { 10, 0, 0 } );
             processed = true;
             break;
         }
@@ -137,21 +114,22 @@ void App::InitScene( int width, int height )
     BOOST_ASSERT(renderer);
     renderer->Init();
 
-    std::vector< BrushPtr > brush1;
+    std::vector< BrushPtr > brushes;
     try {
         // base texture
         TgaBrush* base( new TgaBrush );
         ASSERT( base->Load( "data/Fieldstone.tga"), "Error loading base texture" );
-        brush1.push_back( BrushPtr(base) );
+        brushes.push_back( BrushPtr(base) );
 
-        BmpBrush* normal( new BmpBrush );
-        ASSERT( normal->Load( "data/FieldstoneNoisy.bmp"), "Error loading normal maps" );
-        brush1.push_back( BrushPtr(normal) );
+        TgaBrush* normal( new TgaBrush );
+        ASSERT( normal->Load( "data/FieldstoneNoisy.tga"), "Error loading normal maps" );
+        brushes.push_back( BrushPtr(normal) );
 
         // TODO: add 8 bit support for BMP loader
         DdsBrush* alpha( new DdsBrush );
         ASSERT( alpha->Load( "data/ScratchMetal.dds"), "Error loading specular maps" );
-        brush1.push_back( BrushPtr(alpha) );
+        brushes.push_back( BrushPtr(alpha) );
+
 
     } catch ( boost::filesystem::filesystem_error &ex ) {
         throw;
@@ -160,30 +138,6 @@ void App::InitScene( int width, int height )
     } catch ( std::exception &ex ) {
         throw;
     } catch ( ... ) {
-        throw;
-    }
-
-    std::vector< BrushPtr > brush2;
-    try {
-        // base texture
-        DdsBrush* base( new DdsBrush );
-        ASSERT( base->Load( "data/MetalDecoA.dds"), "Error loading base texture" );
-        brush2.push_back( BrushPtr(base) );
-
-        BmpBrush* normal( new BmpBrush );
-        ASSERT( normal->Load( "data/rocks1.bmp"), "Error loading normal maps" );
-        brush2.push_back( BrushPtr(normal) );
-
-//        BmpBrush* alpha( new BmpBrush );
-//        ASSERT( alpha->Load( "data/MetalDecoB_SPEC.bmp"), "Error loading specular maps" );
-//        brush2.push_back( BrushPtr(alpha) );
-    } catch ( boost::filesystem::filesystem_error &ex ) {
-        throw;
-    } catch ( std::ios_base::failure& ex ) {
-        THROW( "Error loading texture.\n%s", ex.what() );
-    } catch ( std::exception &ex ) {
-        throw;
-    } catch( ... ) {
         throw;
     }
 
@@ -204,20 +158,14 @@ void App::InitScene( int width, int height )
     // this entity renders
     viewport->AddEntity(camera, 0);
 
-    EntityPtr cube( new Cube( brush1 ) );
-    cube->GetRenderState()->Translate( Vector(-7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
-    cube->GetRenderState()->Rotate( Vector(0.0f, 0.0f, 0.0f ) );
+    EntityPtr flag( new Flag( brushes ) );
+    flag->GetRenderState()->Translate( Vector(0.0, 0, 0), Vector(1.0f, 1.0f, 1.0f) );
+    flag->GetRenderState()->Rotate( Vector(-90.0f, 0.0f, 0.0f ) );
     // this entity renders
-    camera->AddEntity(cube, 20 );
-
-    EntityPtr cube2( new Cube( brush2 ) );
-    cube2->GetRenderState()->Translate( Vector(+7.0, 0, 10), Vector(2.0f, 2.0f, 2.0f) );
-    cube2->GetRenderState()->Rotate( Vector(0.0f, 0.0f, 0.0f ) );
-    // this entity renders
-    camera->AddEntity(cube2, 20 );
+    camera->AddEntity(flag, 20 );
 
     // some custom event handler
-    m_EventHandlerList.push_back( boost::bind( &OnHandleCubeKeyEvent, _1, cube, cube2 ) );
+    m_EventHandlerList.push_back( boost::bind( &OnHandleEvent, _1, flag ) );
 
 }
 

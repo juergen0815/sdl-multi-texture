@@ -188,7 +188,7 @@ void Renderer::InitGL()
     glLightfv(GL_LIGHT0, GL_SPECULAR, lightKs);
 
     // position the light
-    float lightPos[4] = {0, 0, 30, 1}; // positional light
+    float lightPos[4] = {0, 0, 30, 0}; // positional light
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
     glEnable(GL_LIGHT0);                        // MUST enable each light source after configuration
@@ -267,7 +267,7 @@ void Renderer::Run()
             for( auto it = m_RenderList.begin(); it != m_RenderList.end(); ) {
                 EntityPtr entity = *it;
                 if ( entity->AreFlagsSet( Entity::F_ENABLE ) ) {
-                    entity->Render( (timeStamp - ticks)*m_TimeBase*float(m_Pause) );
+                    entity->Render( (ticks - timeStamp)*m_TimeBase*float(m_Pause) );
                 }
                 if ( entity->AreFlagsSet( Entity::F_DELETE ) ) {
                     it = m_RenderList.erase( it );
