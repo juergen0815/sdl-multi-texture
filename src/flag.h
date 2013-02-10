@@ -33,10 +33,13 @@ public:
 private:
     GLuint      m_VboID;
 
-    std::vector< BrushPtr > m_Assets;    // all mmaped data. Don't worry about pixel storage memory here!
-    TexturePtr  m_Texture;
-    TexturePtr  m_NormalMap;
-    TexturePtr  m_SpecularNap;
+    enum {
+        BASE_TEXTURE = 0,
+        LIGHT_MAP,
+        MAX_TEXTURES
+    };
+    std::vector< BrushPtr > m_Assets;     // all mmaped data. Don't worry about pixel storage memory here!
+    std::vector< TexturePtr > m_Textures; // all textures
 
     typedef std::vector<Vector, Allocator<Vector>> VertexVector;
 

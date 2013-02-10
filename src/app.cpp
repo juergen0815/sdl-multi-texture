@@ -13,10 +13,7 @@
 #include "camera.h"
 #include "flag.h"
 #include "cube.h"
-
-#include <bmp_loader.h>
-#include <dds_loader.h>
-#include <tga_loader.h>
+#include "brushloader.h"
 
 #include <SDL/SDL.h>
 
@@ -25,6 +22,8 @@
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
+
+#include <string>
 
 // based on NeHe: http://nehe.gamedev.net/tutorial/bump-mapping,_multi-texturing_&_extensions/16009/
 
@@ -115,31 +114,10 @@ void App::InitScene( int width, int height )
     renderer->Init();
 
     std::vector< BrushPtr > brushes;
-    try {
-        // base texture
-        TgaBrush* base( new TgaBrush );
-        ASSERT( base->Load( "data/Fieldstone.tga"), "Error loading base texture" );
-        brushes.push_back( BrushPtr(base) );
-
-        TgaBrush* normal( new TgaBrush );
-        ASSERT( normal->Load( "data/FieldstoneNoisy.tga"), "Error loading normal maps" );
-        brushes.push_back( BrushPtr(normal) );
-
-        // TODO: add 8 bit support for BMP loader
-        DdsBrush* alpha( new DdsBrush );
-        ASSERT( alpha->Load( "data/ScratchMetal.dds"), "Error loading specular maps" );
-        brushes.push_back( BrushPtr(alpha) );
-
-
-    } catch ( boost::filesystem::filesystem_error &ex ) {
-        throw;
-    } catch ( std::ios_base::failure& ex ) {
-        THROW( "Error loading texture.\n%s", ex.what() );
-    } catch ( std::exception &ex ) {
-        throw;
-    } catch ( ... ) {
-        throw;
-    }
+    brushes.push_back( LoadBrush<BmpBrush>("FireBase.bmp") );
+    brushes.push_back( LoadBrush<TgaBrush>("lightmap.tga") );
+    brushes.push_back( LoadBrush<TgaBrush>("FieldstoneNoisy.tga") );
+    brushes.push_back( LoadBrush<DdsBrush>("MetalDecoB.dds") );
 
     ////////////////////////////////////////////////////////////////////////////
     // Compose our scene

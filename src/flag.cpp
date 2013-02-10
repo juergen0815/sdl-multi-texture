@@ -9,7 +9,7 @@
 #include "flag.h"
 #include "cube.h"
 #include "brush.h"
-#include <bmp_loader.h>
+#include "brushloader.h"
 
 #include <cmath>
 
@@ -108,20 +108,7 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     auto mid = m_VertexBuffer[ x + y * pitch ]; // stride = sizeof(Vector) - we have a pair here, Vertex+Tex
 
     std::vector< BrushPtr > brushes;
-    try {
-        // base texture
-        BmpBrush* base( new BmpBrush );
-        ASSERT( base->Load( "data/Wood.bmp"), "Error loading wood texture" );
-        brushes.push_back( BrushPtr(base) );
-    } catch ( boost::filesystem::filesystem_error &ex ) {
-        throw;
-    } catch ( std::ios_base::failure& ex ) {
-        THROW( "Error loading texture.\n%s", ex.what() );
-    } catch ( std::exception &ex ) {
-        throw;
-    } catch ( ... ) {
-        throw;
-    }
+    brushes.push_back( LoadBrush<BmpBrush>("Wood.bmp") );
 
     m_Child = EntityPtr( new Cube( brushes ) );
     m_Child->GetRenderState()->Translate( mid, Vector(1.0f, 1.0f, 1.0f) );
@@ -141,14 +128,19 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
 {
     bool r(false);
 
-    if ( m_Assets.size() ) {
-        for (auto& asset : m_Assets ) {
-            m_Texture = TexturePtr( new Texture );
-            m_Texture->Load( *asset.get() );
-            break; // no multi texture at this time
-        }
-        GetRenderState()->ClearFlag( BLEND_COLOR_F );
+    bool hasMultiTexture  = glewGetExtension("GL_ARB_multitexture");
+    ASSERT( hasMultiTexture, "No multitexture support!" );
+    int numTextureUnits;
+    glGetIntegerv( GL_MAX_TEXTURE_UNITS, &numTextureUnits );
+    ASSERT( MAX_TEXTURES <= numTextureUnits, "Not enough texture units available." );
+    ASSERT( MAX_TEXTURES <= m_Assets.size(), "Not enough textures attached! At least %d textures required.", MAX_TEXTURES );
+
+    for (auto& asset : m_Assets ) {
+        TexturePtr texture( new Texture );
+        texture->Load( *asset.get() );
+        m_Textures.push_back( texture );
     }
+    GetRenderState()->ClearFlag( BLEND_COLOR_F );
 
     bool hasVBO  = glewGetExtension("GL_ARB_vertex_buffer_object");
     ASSERT( hasVBO, "VBOs not supported!" );
@@ -163,16 +155,6 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
         offset += sizeof(Vector)*m_VertexBuffer.size();
         glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(int)*m_IndexArray.size(), &m_IndexArray[0] );
         offset += sizeof(int)*m_IndexArray.size();
-#if 0
-        offset += sizeof(vertices);
-        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(normals), normals);                // copy normals after vertices
-        offset += sizeof(normals);
-        glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(colors), colors);  // copy colors after normals
-#endif
-//        if ( m_Texture ) {
-//            float *texCoords = (float*)&m_VertexBuffer[0];
-//            glBufferSubData(GL_ARRAY_BUFFER, offset, sizeof(Vector)*m_TexCoordBuffer.size(), texCoords);  // copy colors after normals
-//        }
     }
     r = true;
 
@@ -181,21 +163,6 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
 
 void Flag::DoRender() throw(std::exception)
 {
-#if _HAS_NORMALS_
-    // enable vertex arrays
-    int normalArrayEnabled;
-    glGetIntegerv( GL_NORMAL_ARRAY, &normalArrayEnabled );
-    if ( !normalArrayEnabled )  {
-        glEnableClientState(GL_NORMAL_ARRAY);
-    }
-#endif
-#if _HAS_COLOR_ARRAY_
-    int colorArrayEnabled;
-    glGetIntegerv( GL_COLOR_ARRAY, &colorArrayEnabled );
-    if ( !colorArrayEnabled && (GetRenderState()->GetFlags() & BLEND_COLOR_F) ) {
-        glEnableClientState(GL_COLOR_ARRAY);
-    }
-#endif
 
     int vertexArrayEnabled;
     glGetIntegerv( GL_VERTEX_ARRAY, &vertexArrayEnabled );
@@ -204,7 +171,7 @@ void Flag::DoRender() throw(std::exception)
     }
     int m_TexCoordArrayEnabled;
     glGetIntegerv( GL_TEXTURE_COORD_ARRAY, &m_TexCoordArrayEnabled );
-    if ( m_Texture && !m_TexCoordArrayEnabled ) {
+    if ( m_Textures.size() && !m_TexCoordArrayEnabled ) {
         if (!m_TexCoordArrayEnabled) {
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
         }
@@ -218,8 +185,6 @@ void Flag::DoRender() throw(std::exception)
     // before draw, specify vertex and index arrays with their offsets
     std::size_t offset(0);
     glVertexPointer(3, GL_FLOAT, m_Stride*sizeof(Vector), (void*)offset); offset += sizeof(vertices);
-//    glNormalPointer(   GL_FLOAT, 0, (void*)offset); offset += sizeof(normals);
-//    glColorPointer (4, GL_FLOAT, 0, (void*)offset);
     if ( m_Texture) {
         m_Texture->Enable();
         offset += sizeof(Vector);
@@ -236,47 +201,48 @@ void Flag::DoRender() throw(std::exception)
     // before draw, specify vertex arrays
     float *vertices = (float*)&m_VertexBuffer[0];
     glVertexPointer(4, GL_FLOAT, m_Stride*sizeof(Vector), vertices);
-#if _HAS_NORMALS_
-    glNormalPointer(  GL_FLOAT, 0, normals);
 #endif
-#if _HAS_COLOR_ARRAY_
-    glColorPointer(4, GL_FLOAT, 0, colors);
-#else
-//    glColor4f( 0.0f, 0.4f, 1.0f, 0.8f );
-#endif
-    if ( m_Texture) {
-        m_Texture->Enable();
+    if ( m_Textures[BASE_TEXTURE] ) {
+        glClientActiveTexture(GL_TEXTURE0);
         float *texCoords = (float*)&m_VertexBuffer[1];
         // only use u/v coords, skip t/s - stride is from n[0] + offset = n[1]
         glTexCoordPointer( 2, GL_FLOAT, m_Stride*sizeof(Vector), texCoords );
-    }
 
+        glActiveTexture(GL_TEXTURE0);
+        m_Textures[BASE_TEXTURE]->Enable();
+    }
+    if ( m_Textures[LIGHT_MAP] ) {
+        glClientActiveTexture(GL_TEXTURE1);
+        float *texCoords = (float*)&m_VertexBuffer[1];
+        // only use u/v coords, skip t/s - stride is from n[0] + offset = n[1]
+        glTexCoordPointer( 2, GL_FLOAT, m_Stride*sizeof(Vector), texCoords );
+
+        glActiveTexture(GL_TEXTURE1);
+        m_Textures[LIGHT_MAP]->Enable();
+
+        glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_BLEND);
+        glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS);
+        glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_TEXTURE);
+        glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+        glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+    }
     int *indices = &m_IndexArray[0];
     glDrawElements( GL_TRIANGLES, m_IndexArray.size(), GL_UNSIGNED_INT, indices );
 
-#endif
     if (!vertexArrayEnabled)  {
         glDisableClientState(GL_VERTEX_ARRAY);  // disable vertex arrays
     }
-    if ( m_Texture ) {
-        m_Texture->Disable();
-        if (!m_TexCoordArrayEnabled) {
-            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-        }
-        if (blend_enabled) {
-            glEnable( GL_BLEND );
-        }
+
+    if ( m_Textures[BASE_TEXTURE] ) {
+        m_Textures[BASE_TEXTURE]->Disable();
     }
-#if _HAS_NORMALS_
-    if (!colorArrayEnabled)   {
-        glDisableClientState(GL_COLOR_ARRAY);
+    if ( m_Textures[LIGHT_MAP] ) {
+        m_Textures[LIGHT_MAP]->Disable();
     }
-#endif
-#if _HAS_COLOR_ARRAY_
-    if (!normalArrayEnabled) {
-        glDisableClientState(GL_NORMAL_ARRAY);
+    if (!m_TexCoordArrayEnabled) {
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     }
-#endif
+
 }
 
 void Flag::DoUpdate( float ticks ) throw(std::exception)

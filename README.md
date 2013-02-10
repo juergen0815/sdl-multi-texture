@@ -14,8 +14,11 @@ Short:
 
 Description:
 
-	Based on sdl-render-to-texture this example uses code from previous sdl-xx-examples I've written.
-	This example focuses on using multiple textures and applies bump mapping to a surface.
+	Based on sdl-vertex-animation this example uses code from previous sdl-xx-examples I've written.
+	
+	We use a base texture and a second one as a light map simply blending it over the base texture.
+	
+	No shaders are used. Stock OGL 2.x
 	
 	All sdl-xx-examples are written in C++11 using MinGW gcc 4.6 and are Windows only. I'm using
 	Eclipse Juno as Development IDE.
