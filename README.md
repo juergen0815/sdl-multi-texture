@@ -10,7 +10,7 @@ Date:
 	
 Short:
   
-	Example bump mapping/multi textures with OpenGL.
+	Example using multiple textures with OpenGL.
 
 Description:
 
@@ -38,8 +38,8 @@ License:
 
 Compiler used:
 
-	MinGW with Eclipse Juno. Windows only. Linux might just work, MacOS will need some work due to 
-	the fact OSX needs to run the render loop in the main loop. This example runs a render thread decoupled
+	MinGW with Eclipse Juno (gcc4.6 with -std=c++0x). Windows only. Linux might just work, MacOS will need some work due to 
+	the fact OSX needs to run the render loop in the main loop (compiles with LVM compiler). This example runs a render thread decoupled
 	from the main thread.
 
 Have fun
