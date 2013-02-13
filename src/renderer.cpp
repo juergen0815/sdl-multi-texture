@@ -252,7 +252,7 @@ void Renderer::Run()
 
             // Call all updater callbacks (once per frame)
             for ( auto doUpdate = m_Updaters.begin(); doUpdate != m_Updaters.end(); ) {
-                bool remove = doUpdate->second( (timeStamp - ticks)*m_TimeBase*float(m_Pause) );
+                bool remove = doUpdate->second( (ticks - timeStamp)*m_TimeBase*float(m_Pause) );
                 if ( remove ) {
                     doUpdate = m_Updaters.erase( doUpdate );
                     continue;

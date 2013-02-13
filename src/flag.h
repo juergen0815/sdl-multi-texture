@@ -5,9 +5,8 @@
  *      Author: Jurgen
  */
 
-#ifndef MESH_H
+#ifndef FLAG_H
 #define FLAG_H
-
 
 #include "err.h"
 #include "entity.h"
@@ -67,4 +66,4 @@ protected:
 
 };
 
-#endif /* MESH_H */
+#endif /* FLAG_H */
