@@ -136,7 +136,7 @@ void App::InitScene( int width, int height )
     // this entity renders
     viewport->AddEntity(camera, 0);
 
-    EntityPtr flag( new Flag( brushes ) );
+    EntityPtr flag( new Surface( brushes ) );
     flag->GetRenderState()->Translate( Vector(0.0, 0, 0), Vector(1.0f, 1.0f, 1.0f) );
     flag->GetRenderState()->Rotate( Vector(-90.0f, 0.0f, 0.0f ) );
     // this entity renders

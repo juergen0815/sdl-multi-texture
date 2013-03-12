@@ -15,8 +15,8 @@
 
 #include <boost/filesystem.hpp>
 
-const int columns = 120;
-const int rows    = 120;
+const int sCcolumns = 120;
+const int sRows    = 120;
 
 struct PoolDeleter
 {
@@ -27,7 +27,7 @@ struct PoolDeleter
     }
 };
 
-Flag::Flag( const std::vector< BrushPtr >& assets )
+Surface::Surface( const std::vector< BrushPtr >& assets )
     : m_VboID(-1)
     , m_Assets( assets )
     , m_MemoryPool( EntityPool::CreatePool<Vector>( 0 ), PoolDeleter() )
@@ -36,11 +36,11 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     , m_TimeEllapsed(0)
     , m_Speed(1.0)
 {
-    int lastColumn(columns-1);
-    int lastRow(rows-1);
+    int lastColumn(sCcolumns-1);
+    int lastRow(sRows-1);
 
     // allocate memory buffers for vertex and texture coord
-    m_VertexBuffer.resize( columns*rows*m_Stride );
+    m_VertexBuffer.resize( sCcolumns*sRows*m_Stride );
 
     // generate index array; we got rows * columns * 2 tris
     m_IndexArray.resize( lastColumn * lastRow * 3 * 2 ); // 3 vertices per tri, 2 tri per quad = 6 entries per iteration
@@ -51,16 +51,16 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     const float height_2 = 5.0f;
 
     // generate vertex array
-    const float xstep = (2*width_2)/columns; // mesh sub divider - 0.2f
-    const float ystep = (2*height_2)/rows; // mesh sub divider - 0.2f
+    const float xstep = (2*width_2)/sCcolumns; // mesh sub divider - 0.2f
+    const float ystep = (2*height_2)/sRows; // mesh sub divider - 0.2f
     const float amp  = 0.85f; // "height" of wave
     const float numWaves = 16.0f; // num of sin loops (or waves)
     auto vit = m_VertexBuffer.begin();
 
     // I think we need an additional row/column to finish this mesh ??
-    for ( float y = 0; y < rows; ++y )
+    for ( float y = 0; y < sRows; ++y )
     {
-        for ( float x = 0; x < columns; ++x )
+        for ( float x = 0; x < sCcolumns; ++x )
         {
             // pack both, vertex and texture into one array
 
@@ -68,7 +68,7 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
             vertex[ Vector::X ] = x * xstep - width_2; // -4.4 ... +4.4
             vertex[ Vector::Y ] = y * ystep - height_2; // -4.4 ... +4.4
             // maybe I should shift this for each row, huh, norm x to "length" of column (0.0 - 1.0)
-            vertex[ Vector::Z ] = std::sin( (x/columns) * numWaves ) * amp; // make z a big "wavy"
+            vertex[ Vector::Z ] = std::sin( (x/sCcolumns) * numWaves ) * amp; // make z a big "wavy"
 
             // calc texture positions
             Vector& texCoord = *vit; ++vit;
@@ -92,22 +92,22 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
 
                 // top tri
                 int
-                idx = int(x + 0 + columns*y);     m_IndexArray[ looper++ ] = idx;  // 0x0
-                idx = int(x + 1 + columns*y);     m_IndexArray[ looper++ ] = idx;  // 1x0
-                idx = int(x + 0 + columns*(y+1)); m_IndexArray[ looper++ ] = idx;  // 1x1 - bottom row
+                idx = int(x + 0 + sCcolumns*y);     m_IndexArray[ looper++ ] = idx;  // 0x0
+                idx = int(x + 1 + sCcolumns*y);     m_IndexArray[ looper++ ] = idx;  // 1x0
+                idx = int(x + 0 + sCcolumns*(y+1)); m_IndexArray[ looper++ ] = idx;  // 1x1 - bottom row
 
                 // bottom tri
-                idx = int(x + 1 + columns*y);     m_IndexArray[ looper++ ] = idx; // 0x0
-                idx = int(x + 0 + columns*(y+1)); m_IndexArray[ looper++ ] = idx; // 1x1 - bottom row
-                idx = int(x + 1 + columns*(y+1)); m_IndexArray[ looper++ ] = idx; // 0x1 - bottom row
+                idx = int(x + 1 + sCcolumns*y);     m_IndexArray[ looper++ ] = idx; // 0x0
+                idx = int(x + 0 + sCcolumns*(y+1)); m_IndexArray[ looper++ ] = idx; // 1x1 - bottom row
+                idx = int(x + 1 + sCcolumns*(y+1)); m_IndexArray[ looper++ ] = idx; // 0x1 - bottom row
                 idx = 0;
             }
         }
     }
 
-    int pitch  = columns*m_Stride; // pair of Vertex + TexCoord
-    int x = columns/2*m_Stride;
-    int y = rows/2;
+    int pitch  = sCcolumns*m_Stride; // pair of Vertex + TexCoord
+    int x = sCcolumns/2*m_Stride;
+    int y = sRows/2;
     auto mid = m_VertexBuffer[ x + y * pitch ]; // stride = sizeof(Vector) - we have a pair here, Vertex+Tex
 
     std::vector< BrushPtr > brushes;
@@ -119,7 +119,7 @@ Flag::Flag( const std::vector< BrushPtr >& assets )
     AddEntity( m_Child, 0 );
 }
 
-Flag::~Flag()
+Surface::~Surface()
 {
     // shouldn't be done in d'tor...might be weakly linked to e.g. event handler...but vbo must be released from render thread
     if ( m_VboID > 0 ) {
@@ -127,7 +127,7 @@ Flag::~Flag()
     }
 }
 
-bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
+bool Surface::DoInitialize( Renderer* renderer ) throw(std::exception)
 {
     bool hasMultiTexture  = glewGetExtension("GL_ARB_multitexture");
     ASSERT( hasMultiTexture, "No multitexture support!" );
@@ -161,7 +161,7 @@ bool Flag::DoInitialize( Renderer* renderer ) throw(std::exception)
     return true;
 }
 
-void Flag::DoRender() throw(std::exception)
+void Surface::DoRender() throw(std::exception)
 {
     int vertexArrayEnabled;
     glGetIntegerv( GL_VERTEX_ARRAY, &vertexArrayEnabled );
@@ -247,7 +247,7 @@ void Flag::DoRender() throw(std::exception)
 
 }
 
-void Flag::DoUpdate( float ticks ) throw(std::exception)
+void Surface::DoUpdate( float ticks ) throw(std::exception)
 {
     m_TimeEllapsed += ticks;
     if ( m_TimeEllapsed*m_Speed > 16.67 )
@@ -259,7 +259,7 @@ void Flag::DoUpdate( float ticks ) throw(std::exception)
             auto& vertex = *vit; vit += m_Stride;
             vertex[ Vector::Z ] = (*vit)[ Vector::Z ];
         }
-        auto& last = m_VertexBuffer[ columns*rows*m_Stride-m_Stride];
+        auto& last = m_VertexBuffer[ sCcolumns*sRows*m_Stride-m_Stride];
         last[ Vector::Z ] = first[ Vector::Z ];
 
         // This is one example why we are using a custom Vector array instead of simple floats.
@@ -267,9 +267,9 @@ void Flag::DoUpdate( float ticks ) throw(std::exception)
         // But we have all luxury a vector has, e.g. normalizing, dot and cross product, etc.
 
         // use mid point of mesh
-        int pitch  = columns*m_Stride; // pair of Vertex + TexCoord
-        int x = columns/2*m_Stride;
-        int y = rows/2;
+        int pitch  = sCcolumns*m_Stride; // pair of Vertex + TexCoord
+        int x = sCcolumns/2*m_Stride;
+        int y = sRows/2;
         auto mid = m_VertexBuffer[ x + y * pitch ]; // stride = 2*Vector - we have a pair here, Vertex+Tex
         // let it "swim"
         m_Child ->GetRenderState()->GetMatrix().LoadIdentity().Translate( mid );

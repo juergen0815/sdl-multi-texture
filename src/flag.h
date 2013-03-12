@@ -18,7 +18,7 @@
 
 #include <vector>
 
-class Flag : public Entity
+class Surface : public Entity
 {
 public:
     enum {
@@ -54,9 +54,9 @@ private:
 
     EntityPtr   m_Child;              // link this just for the
 public:
-    Flag( const std::vector< BrushPtr >& assets );
+    Surface( const std::vector< BrushPtr >& assets );
 
-    virtual ~Flag();
+    virtual ~Surface();
 
 protected:
     virtual bool DoInitialize( Renderer* renderer ) throw(std::exception);
