@@ -6,7 +6,7 @@
  */
 
 #ifndef MESH_H
-#define FLAG_H
+#define MESH_H
 
 
 #include "err.h"
